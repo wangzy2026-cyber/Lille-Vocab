@@ -1,4 +1,1 @@
-gTTS
-openai
-emoji
 streamlit
