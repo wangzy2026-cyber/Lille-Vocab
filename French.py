@@ -2,73 +2,65 @@ import streamlit as st
 from openai import OpenAI
 import emoji
 import random
-import edge_tts
-import asyncio
-import base64
-import time
 
 # 1. 核心配置
-client = OpenAI(
-    api_key=st.secrets["api_key"], 
-    base_url="https://api.deepseek.com"
-)
+try:
+    client = OpenAI(
+        api_key=st.secrets["api_key"], 
+        base_url="https://api.deepseek.com"
+    )
+except Exception as e:
+    st.error(f"Secrets 配置错误: {e}")
 
-# 异步生成语音
-async def generate_voice(text):
-    # 改用较快的语音包，缩短生成时间
-    communicate = edge_tts.Communicate(text, "fr-FR-EloiseNeural")
-    audio_data = b""
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_data += chunk["data"]
-    return audio_data
-
-# 2. 样式
+# 2. 极致简样式
 st.set_page_config(page_title="Lille Survival", page_icon="🇫🇷")
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stDeployButton {visibility: hidden;}
-    .stButton>button { width: 100%; height: 120px; font-size: 100px; background: none; border: none; }
-    .emoji-display { font-size: 150px; text-align: center; margin: 10px 0; }
-    .fr-text { text-align: center; color: #002395; font-size: 60px; font-weight: bold; line-height: 1.1; }
-    .cn-text { text-align: center; color: #666; font-size: 30px; margin-top: 5px; margin-bottom: 20px;}
-    
-    /* 调整手机端音频条宽度 */
-    div[data-testid="stAudio"] {
-        max-width: 280px;
-        margin: 0 auto;
+    .stButton>button { 
+        width: 100%; height: 120px; font-size: 100px; 
+        background: #fdfdfd; border: 1px solid #eee; border-radius: 20px;
     }
+    .emoji-display { font-size: 150px; text-align: center; margin: 10px 0; }
+    .fr-text { text-align: center; color: #002395; font-size: 60px; font-weight: bold; }
+    .cn-text { text-align: center; color: #666; font-size: 30px; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 逻辑逻辑
+# 3. 核心交互逻辑
 if st.button("🇫🇷"):
+    # 第一步：瞬间选出一个 Emoji 并显示（不等待 API，确保点完就有反应）
     all_emojis = list(emoji.EMOJI_DATA.keys())
     random_emoji = random.choice(all_emojis)
     
+    # 创建三个占位符，按顺序填入
+    emoji_spot = st.empty()
+    text_spot = st.empty()
+    audio_spot = st.empty()
+    
+    # 先把图标甩出来
+    emoji_spot.markdown(f'<div class="emoji-display">{random_emoji}</div>', unsafe_allow_html=True)
+    
+    # 第二步：尝试获取翻译
     try:
+        # 增加超时控制，防止死锁
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": f"符号 '{random_emoji}'，法语|中文"}],
-            temperature=1.2,
-            max_tokens=40
+            timeout=8
         )
         res = response.choices[0].message.content.strip().split("|")
         
         if len(res) >= 2:
             fr, cn = res[0].strip(), res[1].strip()
             
-            st.markdown(f'<div class="emoji-display">{random_emoji}</div>', unsafe_allow_html=True)
-            st.markdown(f'<p class="fr-text">{fr}</p>', unsafe_allow_html=True)
-            st.markdown(f'<p class="cn-text">{cn}</p>', unsafe_allow_html=True)
+            # 填入文字
+            text_spot.markdown(f'<p class="fr-text">{fr}</p><p class="cn-text">{cn}</p>', unsafe_allow_html=True)
             
-            # 🔊 语音逻辑优化
-            # 1. 异步生成字节流
-            audio_content = asyncio.run(generate_voice(fr))
-            
-            # 2. 直接使用 Streamlit 原生音频组件（它对手机浏览器兼容性更好）
-            # 使用时间戳作为 key，强制刷新组件，解决“一直加载”或“播旧语音”的问题
-            st.audio(audio_content, format='audio/mp3', autoplay=True)
+            # 第三步：填入语音 (Google TTS 接口，国内可用)
+            tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={fr}&tl=fr&client=tw-ob"
+            audio_spot.audio(tts_url, format='audio/mp3', autoplay=True)
             
     except Exception as e:
-        st.error("网络开小差了，再点一次试试？")
+        # 如果 API 超时或报错，至少显示个提示
+        text_spot.markdown(f'<p class="cn-text">网络连接中... ({str(e)[:20]})</p>', unsafe_allow_html=True)
