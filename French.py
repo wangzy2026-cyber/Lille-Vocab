@@ -1,10 +1,7 @@
 import streamlit as st
 import random
-import edge_tts
-import asyncio
-import base64
 
-# 1. 词库 (保持之前的扩充内容)
+# 1. 词库
 VOCAB = [
     ["🥐", "Croissant", "羊角面包"], ["☕", "Café", "咖啡"], ["🥖", "Baguette", "法棍"],
     ["🧀", "Fromage", "奶酪"], ["🍷", "Vin", "葡萄酒"], ["🍳", "Œuf", "鸡蛋"],
@@ -13,64 +10,53 @@ VOCAB = [
 ]
 
 # 2. 页面配置
-st.set_page_config(page_title="Lille Survival", page_icon="🇫🇷")
+st.set_page_config(page_title="Lille", page_icon="🇫🇷")
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stDeployButton {visibility: hidden;}
-    div.stButton > button {
-        width: 100%; height: 70px; font-size: 30px !important;
-        border-radius: 15px; border: 2px solid #002395;
+    .stButton>button { 
+        width: 100%; height: 80px; font-size: 30px !important; 
+        border-radius: 20px; border: 2px solid #002395; 
     }
     .result-container { text-align: center; margin-top: 20px; }
-    .emoji-font { font-size: 120px; }
-    .fr-font { font-size: 60px; font-weight: bold; color: #002395; margin: 10px 0; }
-    .cn-font { font-size: 30px; color: #666; }
-    /* 让音频播放条更显眼 */
-    audio { width: 100%; max-width: 300px; margin: 10px auto; display: block; }
+    .emoji-font { font-size: 130px; }
+    .fr-font { font-size: 70px; font-weight: bold; color: #002395; margin: 10px 0; cursor: pointer; }
+    .cn-font { font-size: 35px; color: #666; }
+    .play-btn { 
+        background-color: #002395; color: white; padding: 15px 30px; 
+        border-radius: 50px; font-size: 20px; border: none; margin-top: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 核心逻辑
-if 'current_item' not in st.session_state:
-    st.session_state.current_item = None
+# 3. 逻辑
+if 'item' not in st.session_state:
+    st.session_state.item = None
 
-# 按钮：抽取新单词
 if st.button("🇫🇷 抽取新单词"):
-    st.session_state.current_item = random.choice(VOCAB)
+    st.session_state.item = random.choice(VOCAB)
 
-if st.session_state.current_item:
-    icon, fr, cn = st.session_state.current_item
+if st.session_state.item:
+    icon, fr, cn = st.session_state.item
     
-    # 渲染文字
     st.markdown(f"""
         <div class="result-container">
             <div class="emoji-font">{icon}</div>
-            <div class="fr-font">{fr}</div>
+            <div class="fr-font" id="fr-text">{fr}</div>
             <div class="cn-font">{cn}</div>
+            
+            <button class="play-btn" onclick="speak()">🔊 听发音 (Écouter)</button>
         </div>
+
+        <script>
+        function speak() {{
+            var msg = new SpeechSynthesisUtterance();
+            msg.text = "{fr}";
+            msg.lang = 'fr-FR'; // 设置为地道法语
+            msg.rate = 0.8;      // 语速稍慢
+            window.speechSynthesis.speak(msg);
+        }}
+        // 尝试自动播放（部分手机支持）
+        setTimeout(speak, 500);
+        </script>
     """, unsafe_allow_html=True)
-    
-    # --- 语音处理部分：这是手机端修复的关键 ---
-    try:
-        # 使用异步函数生成音频
-        async def generate_audio():
-            communicate = edge_tts.Communicate(fr, "fr-FR-EloiseNeural")
-            data = b""
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    data += chunk["data"]
-            return data
-
-        # 在手机端，我们显式地生成音频
-        audio_bytes = asyncio.run(generate_audio())
-        
-        # 核心改动：不再强求自动播放（autoplay=False）
-        # 让用户手动点击播放条上的“播放”按钮，这在手机上是 100% 成功的
-        st.audio(audio_bytes, format='audio/mp3', autoplay=False)
-        st.info("💡 手机端请手动点击上方播放键发音")
-        
-    except Exception as e:
-        st.warning("语音生成中，请稍后再试...")
-
-else:
-    st.markdown("<h3 style='text-align:center; color:#ccc; margin-top:100px;'>点按上方按钮开始</h3>", unsafe_allow_html=True)
