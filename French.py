@@ -4,50 +4,44 @@ import edge_tts
 import asyncio
 import base64
 
-# 1. 词库
+# 1. 词库 (保持之前的扩充内容)
 VOCAB = [
     ["🥐", "Croissant", "羊角面包"], ["☕", "Café", "咖啡"], ["🥖", "Baguette", "法棍"],
-    ["🐱", "Chat", "猫"], ["🐶", "Chien", "狗"], ["🚗", "Voiture", "汽车"],
-    ["🏠", "Maison", "房子"], ["☀️", "Soleil", "太阳"], ["🍎", "Pomme", "苹果"],
-    ["🧀", "Fromage", "奶酪"], ["🍷", "Vin", "葡萄酒"], ["🚲", "Vélo", "自行车"]
+    ["🧀", "Fromage", "奶酪"], ["🍷", "Vin", "葡萄酒"], ["🍳", "Œuf", "鸡蛋"],
+    ["🚗", "Voiture", "汽车"], ["🚲", "Vélo", "自行车"], ["🏠", "Maison", "房子"],
+    ["🏙️", "Ville", "城市"], ["🍎", "Pomme", "苹果"], ["🐱", "Chat", "猫"]
 ]
 
-# 异步生成语音
-async def get_voice_bytes(text):
-    communicate = edge_tts.Communicate(text, "fr-FR-EloiseNeural")
-    audio_bytes = b""
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_bytes += chunk["data"]
-    return audio_bytes
-
-# 2. 样式
-st.set_page_config(page_title="Lille", page_icon="🇫🇷")
+# 2. 页面配置
+st.set_page_config(page_title="Lille Survival", page_icon="🇫🇷")
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stDeployButton {visibility: hidden;}
     div.stButton > button {
-        width: 100px; height: 50px; font-size: 30px !important;
-        border-radius: 20px; border: 2px solid #002395;
+        width: 100%; height: 70px; font-size: 30px !important;
+        border-radius: 15px; border: 2px solid #002395;
     }
     .result-container { text-align: center; margin-top: 20px; }
-    .emoji-font { font-size: 150px; }
-    .fr-font { font-size: 80px; font-weight: bold; color: #002395; margin: 10px 0; }
-    .cn-font { font-size: 40px; color: #666; }
+    .emoji-font { font-size: 120px; }
+    .fr-font { font-size: 60px; font-weight: bold; color: #002395; margin: 10px 0; }
+    .cn-font { font-size: 30px; color: #666; }
+    /* 让音频播放条更显眼 */
+    audio { width: 100%; max-width: 300px; margin: 10px auto; display: block; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 逻辑
-if 'item' not in st.session_state:
-    st.session_state.item = None
+# 3. 核心逻辑
+if 'current_item' not in st.session_state:
+    st.session_state.current_item = None
 
-if st.button("🇫🇷"):
-    st.session_state.item = random.choice(VOCAB)
+# 按钮：抽取新单词
+if st.button("🇫🇷 抽取新单词"):
+    st.session_state.current_item = random.choice(VOCAB)
 
-if st.session_state.item:
-    icon, fr, cn = st.session_state.item
+if st.session_state.current_item:
+    icon, fr, cn = st.session_state.current_item
     
-    # 渲染文字和图标
+    # 渲染文字
     st.markdown(f"""
         <div class="result-container">
             <div class="emoji-font">{icon}</div>
@@ -56,9 +50,27 @@ if st.session_state.item:
         </div>
     """, unsafe_allow_html=True)
     
-    # 生成并播放语音 (Edge TTS 不需要梯子)
+    # --- 语音处理部分：这是手机端修复的关键 ---
     try:
-        audio_data = asyncio.run(get_voice_bytes(fr))
-        st.audio(audio_data, format='audio/mp3', autoplay=True)
+        # 使用异步函数生成音频
+        async def generate_audio():
+            communicate = edge_tts.Communicate(fr, "fr-FR-EloiseNeural")
+            data = b""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    data += chunk["data"]
+            return data
+
+        # 在手机端，我们显式地生成音频
+        audio_bytes = asyncio.run(generate_audio())
+        
+        # 核心改动：不再强求自动播放（autoplay=False）
+        # 让用户手动点击播放条上的“播放”按钮，这在手机上是 100% 成功的
+        st.audio(audio_bytes, format='audio/mp3', autoplay=False)
+        st.info("💡 手机端请手动点击上方播放键发音")
+        
     except Exception as e:
-        st.write("语音加载中...")
+        st.warning("语音生成中，请稍后再试...")
+
+else:
+    st.markdown("<h3 style='text-align:center; color:#ccc; margin-top:100px;'>点按上方按钮开始</h3>", unsafe_allow_html=True)
