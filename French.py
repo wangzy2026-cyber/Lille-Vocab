@@ -25,7 +25,7 @@ def get_french_name(emoj_char):
         return [f"Error: {str(e)}", "错误"]
 
 # 2. 样式
-st.set_page_config(page_title="Lille Survival", page_icon="🇫🇷")
+st.set_page_config(page_title="French vocab", page_icon="🇫🇷")
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stDeployButton {visibility: hidden;}
