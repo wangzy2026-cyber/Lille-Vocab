@@ -2,71 +2,60 @@ import streamlit as st
 from openai import OpenAI
 import emoji
 import random
-import os
+from gtts import gTTS
+import io
 
 # 1. 核心配置
 client = OpenAI(
-    api_key="sk-a54eade075e6408a9f1f32a1a3181f0e", 
+    api_key=st.secrets["api_key"], 
     base_url="https://api.deepseek.com"
 )
 
 def get_french_name(emoj_char):
-    prompt = f"针对符号 '{emoj_char}'，给出一个法语名词和中文。格式：法语|中文"
+    prompt = f"针对符号 '{emoj_char}'，给出一个法语名词和对应的中文。格式：法语|中文"
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
+            temperature=1.0,
+            max_tokens=40
         )
         return response.choices[0].message.content.strip().split("|")
-    except:
-        return ["Bonjour", "你好"]
+    except Exception as e:
+        return [f"Error: {str(e)}", "错误"]
 
-# 2. 极致简样式
-st.set_page_config(page_title="Lille", page_icon="🇫🇷")
+# 2. 样式
+st.set_page_config(page_title="Lille Survival", page_icon="🇫🇷")
 st.markdown("""
     <style>
-    /* 隐藏所有系统 UI */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stDeployButton {display:none;}
-    
-    /* 按钮样式：纯透明底色，只有国旗 */
-    .stButton>button { 
-        width: 100%; 
-        height: 150px; 
-        font-size: 100px; 
-        background: none; 
-        border: none;
-        box-shadow: none;
-    }
-    .stButton>button:active { background: none; }
-    
-    .emoji-display { font-size: 180px; text-align: center; margin: 20px 0; }
-    .fr-text { text-align: center; color: #002395; font-size: 90px; font-weight: bold; }
-    .cn-text { text-align: center; color: #666; font-size: 40px; }
+    #MainMenu, footer, header, .stDeployButton {visibility: hidden;}
+    .stButton>button { width: 100%; height: 100px; font-size: 80px; background: none; border: none; }
+    .emoji-display { font-size: 150px; text-align: center; margin: 10px 0; }
+    .fr-text { text-align: center; color: #002395; font-size: 70px; font-weight: bold; }
+    .cn-text { text-align: center; color: #666; font-size: 30px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 核心交互
-# 使用 container 确保布局干净
-container = st.container()
-
+# 3. 逻辑
 if st.button("🇫🇷"):
-    # 随机抽取一个 Emoji
     all_emojis = list(emoji.EMOJI_DATA.keys())
     random_emoji = random.choice(all_emojis)
     
-    # 获取翻译
     res = get_french_name(random_emoji)
     if len(res) >= 2:
-        fr, cn = res[0], res[1]
+        fr, cn = res[0].strip(), res[1].strip()
         
-        # 直接显示内容，不带任何 loading 提示
-        container.markdown(f'<div class="emoji-display">{random_emoji}</div>', unsafe_allow_html=True)
-        container.markdown(f'<p class="fr-text">{fr}</p>', unsafe_allow_html=True)
-        container.markdown(f'<p class="cn-text">{cn}</p>', unsafe_allow_html=True)
+        st.markdown(f'<div class="emoji-display">{random_emoji}</div>', unsafe_allow_html=True)
+        st.markdown(f'<p class="fr-text">{fr}</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="cn-text">{cn}</p>', unsafe_allow_html=True)
         
-        # 🔊 Mac 系统原生发音 (Thomas 是地道的男声)
-        os.system(f"say -v Thomas '{fr}'")
+        # --- 语音调试核心区 ---
+        try:
+            tts = gTTS(text=fr, lang='fr')
+            audio_bytes = io.BytesIO()
+            tts.write_to_fp(audio_bytes)
+            # 这里的 getvalue() 很关键
+            st.audio(audio_bytes.getvalue(), format='audio/mp3', autoplay=True)
+        except Exception as e:
+            # 如果没声音，这里会显示具体的报错信息
+            st.warning(f"语音生成失败，原因: {e}")
