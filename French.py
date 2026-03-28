@@ -7,25 +7,18 @@ import time
 import emoji
 from openai import OpenAI
 
-# 1. 配置 DeepSeek (用于翻译全库随机出来的 Emoji)
+# 1. 核心配置
 client = OpenAI(
     api_key=st.secrets["api_key"], 
     base_url="https://api.deepseek.com"
 )
 
-# 2. 核心词库 (保留你最稳的基础词)
-BASE_VOCAB = [
-    ["🥐", "Croissant", "羊角面包"], ["🥖", "Baguette", "法棍"], ["☕", "Café", "咖啡"], 
-    ["🧀", "Fromage", "奶酪"], ["🍷", "Vin", "葡萄酒"], ["🍳", "Œuf", "鸡蛋"], 
-    ["🏠", "Maison", "房子"], ["🏙️", "Ville", "城市"], ["🏫", "École", "学校"]
-    # ... 其他 150 个词建议也保留在代码里作为“高频保底”
-]
-
-# 获取全部 Emoji 列表
+# 获取全部 Emoji 列表（包含 3000+ 符号）
 ALL_EMOJIS = list(emoji.EMOJI_DATA.keys())
 
-# 3. 语音生成逻辑
+# 2. 语音生成函数
 async def get_voice_b64(text):
+    # 使用地道的 Eloise 女声
     communicate = edge_tts.Communicate(text, "fr-FR-EloiseNeural", rate="-5%")
     audio_data = b""
     async for chunk in communicate.stream():
@@ -33,68 +26,87 @@ async def get_voice_b64(text):
             audio_data += chunk["data"]
     return base64.b64encode(audio_data).decode()
 
-# 4. 样式配置
+# 3. 样式配置 (极致简约)
 st.set_page_config(page_title="Lille Infinity", page_icon="🇫🇷")
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stDeployButton {visibility: hidden;}
+    /* 按钮只留一个 🇫🇷 */
     .stButton>button { 
-        width: 100%; height: 75px; font-size: 30px !important; 
-        border-radius: 20px; border: 2px solid #002395; 
-        background: #f8f9fa; color: #002395; font-weight: bold;
+        width: 120px; height: 120px; font-size: 70px !important; 
+        border-radius: 50%; border: 2px solid #eee; 
+        background: #ffffff; margin: 0 auto; display: block;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     }
-    .result-container { text-align: center; margin-top: 20px; }
-    .emoji-font { font-size: 130px; margin-bottom: 0px; }
-    .fr-font { font-size: 65px; font-weight: bold; color: #002395; margin: 5px 0; }
-    .cn-font { font-size: 32px; color: #666; margin-top: 0px; }
-    audio { display: block; margin: 15px auto; width: 280px; }
+    .stButton>button:active { transform: scale(0.95); border-color: #002395; }
+    
+    .result-container { text-align: center; margin-top: 30px; }
+    .emoji-font { font-size: 150px; margin-bottom: 10px; }
+    .fr-font { font-size: 65px; font-weight: bold; color: #002395; margin: 10px 0; }
+    .cn-font { font-size: 30px; color: #666; margin-top: 0px; }
+    audio { display: block; margin: 20px auto; width: 280px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 占位符
-emoji_p = st.empty()
-text_p = st.empty()
-audio_p = st.empty()
+# 4. 逻辑处理
+# 居中放置按钮
+col1, col2, col3 = st.columns([1, 1, 1])
+with col2:
+    btn_clicked = st.button("🇫🇷")
 
-# 5. 核心逻辑
-if st.button("🇫🇷 开启无限法语盲盒"):
-    # 80% 概率抽基础词，20% 概率抽全库盲盒
-    if random.random() > 0.2:
-        icon, fr, cn = random.choice(BASE_VOCAB)
-    else:
-        # 从 3000 个 Emoji 里盲抽
-        icon = random.choice(ALL_EMOJIS)
-        try:
-            # 实时问 AI 这个 Emoji 怎么说
-            response = client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[{"role": "user", "content": f"符号 '{icon}'，给出一个法语名词和中文。格式：法语|中文"}],
-                timeout=5
-            )
-            res = response.choices[0].message.content.strip().split("|")
-            fr, cn = (res[0], res[1]) if len(res) >= 2 else ("?", "?")
-        except:
-            fr, cn = "Erreur", "网络小卡顿"
+# 预设展示位
+emoji_spot = st.empty()
+text_spot = st.empty()
+audio_spot = st.empty()
 
-    # 更新 UI
-    emoji_p.markdown(f'<div class="result-container"><div class="emoji-font">{icon}</div></div>', unsafe_allow_html=True)
-    text_p.markdown(f'<div class="result-container"><div class="fr-font">{fr}</div><div class="cn-font">{cn}</div></div>', unsafe_allow_html=True)
+if btn_clicked:
+    # 彻底盲抽
+    icon = random.choice(ALL_EMOJIS)
     
-    # 音频处理
-    audio_p.empty()
-    nonce = str(time.time()).replace(".", "")
+    # 立即展示图标，文字区域显示加载状态
+    emoji_spot.markdown(f'<div class="result-container"><div class="emoji-font">{icon}</div></div>', unsafe_allow_html=True)
+    text_spot.markdown(f'<div class="result-container"><div class="cn-font">正在翻译...</div></div>', unsafe_allow_html=True)
+    
     try:
-        b64_str = asyncio.run(get_voice_b64(fr))
-        audio_html = f"""
-            <div style="display: flex; justify-content: center;">
-                <audio controls autoplay id="audio_{nonce}">
-                    <source src="data:audio/mp3;base64,{b64_str}" type="audio/mp3">
-                </audio>
-            </div>
-            <script>
-                setTimeout(() => {{ document.getElementById('audio_{nonce}').play(); }}, 150);
-            </script>
-        """
-        audio_p.markdown(audio_html, unsafe_allow_html=True)
-    except:
-        audio_p.info("语音加载中...")
+        # AI 实时翻译这个随机 Emoji
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": f"符号 '{icon}'，给出最贴切的一个法语名词和中文。格式：法语|中文"}],
+            timeout=8
+        )
+        res = response.choices[0].message.content.strip().split("|")
+        
+        if len(res) >= 2:
+            fr, cn = res[0].strip(), res[1].strip()
+            
+            # 更新文字
+            text_spot.markdown(f'<div class="result-container"><div class="fr-font">{fr}</div><div class="cn-font">{cn}</div></div>', unsafe_allow_html=True)
+            
+            # 生成并注入音频
+            audio_spot.empty()
+            nonce = str(time.time()).replace(".", "")
+            b64_str = asyncio.run(get_voice_b64(fr))
+            
+            audio_html = f"""
+                <div style="display: flex; justify-content: center;">
+                    <audio controls autoplay id="audio_{nonce}">
+                        <source src="data:audio/mp3;base64,{b64_str}" type="audio/mp3">
+                    </audio>
+                </div>
+                <script>
+                    setTimeout(() => {{ 
+                        var a = document.getElementById('audio_{nonce}');
+                        if(a) a.play();
+                    }}, 200);
+                </script>
+            """
+            audio_spot.markdown(audio_html, unsafe_allow_html=True)
+        else:
+            text_spot.error("这个符号太神秘了，再抽一个！")
+            
+    except Exception as e:
+        text_spot.warning("网络开小差了，再试一次吧")
+
+else:
+    # 初始状态什么都不显示，或者只显示一个小提示
+    st.markdown("<p style='text-align:center; color:#ddd; margin-top:50px;'>点击 🇫🇷 开始无限挑战</p>", unsafe_allow_html=True)
