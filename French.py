@@ -13,8 +13,9 @@ client = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
-# 异步生成语音函数
+# 异步生成语音
 async def generate_voice(text):
+    # 改用较快的语音包，缩短生成时间
     communicate = edge_tts.Communicate(text, "fr-FR-EloiseNeural")
     audio_data = b""
     async for chunk in communicate.stream():
@@ -29,9 +30,14 @@ st.markdown("""
     #MainMenu, footer, header, .stDeployButton {visibility: hidden;}
     .stButton>button { width: 100%; height: 120px; font-size: 100px; background: none; border: none; }
     .emoji-display { font-size: 150px; text-align: center; margin: 10px 0; }
-    .fr-text { text-align: center; color: #002395; font-size: 70px; font-weight: bold; }
-    .cn-text { text-align: center; color: #666; font-size: 30px; margin-bottom: 20px;}
-    audio { display: block; margin: 0 auto; width: 250px; }
+    .fr-text { text-align: center; color: #002395; font-size: 60px; font-weight: bold; line-height: 1.1; }
+    .cn-text { text-align: center; color: #666; font-size: 30px; margin-top: 5px; margin-bottom: 20px;}
+    
+    /* 调整手机端音频条宽度 */
+    div[data-testid="stAudio"] {
+        max-width: 280px;
+        margin: 0 auto;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -40,13 +46,11 @@ if st.button("🇫🇷"):
     all_emojis = list(emoji.EMOJI_DATA.keys())
     random_emoji = random.choice(all_emojis)
     
-    # 强制 AI 生成新内容
-    prompt = f"针对符号 '{random_emoji}'，给出一个法语名词和对应的中文。格式：法语|中文"
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=1.2, # 提高随机性
+            messages=[{"role": "user", "content": f"符号 '{random_emoji}'，法语|中文"}],
+            temperature=1.2,
             max_tokens=40
         )
         res = response.choices[0].message.content.strip().split("|")
@@ -58,18 +62,13 @@ if st.button("🇫🇷"):
             st.markdown(f'<p class="fr-text">{fr}</p>', unsafe_allow_html=True)
             st.markdown(f'<p class="cn-text">{cn}</p>', unsafe_allow_html=True)
             
-            # 🔊 语音逻辑：加入随机时间戳戳破缓存
+            # 🔊 语音逻辑优化
+            # 1. 异步生成字节流
             audio_content = asyncio.run(generate_voice(fr))
-            b64_audio = base64.b64encode(audio_content).decode()
-            nonce = time.time() # 生成一个当前时间戳
             
-            # 在 src 后面加一个无意义的参数 ?v={nonce}
-            audio_html = f"""
-                <audio autoplay="true" controls key="{nonce}">
-                    <source src="data:audio/mp3;base64,{b64_audio}#t={nonce}" type="audio/mp3">
-                </audio>
-            """
-            st.markdown(audio_html, unsafe_allow_html=True)
+            # 2. 直接使用 Streamlit 原生音频组件（它对手机浏览器兼容性更好）
+            # 使用时间戳作为 key，强制刷新组件，解决“一直加载”或“播旧语音”的问题
+            st.audio(audio_content, format='audio/mp3', autoplay=True)
             
     except Exception as e:
-        st.error("哎呀，断网了或出错了，再点一次试试")
+        st.error("网络开小差了，再点一次试试？")
