@@ -5,7 +5,7 @@ import random
 import edge_tts
 import asyncio
 import base64
-import io
+import time
 
 # 1. 核心配置
 client = OpenAI(
@@ -13,9 +13,8 @@ client = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
-# 异步生成语音函数 (使用微软 Edge 接口)
+# 异步生成语音函数
 async def generate_voice(text):
-    # fr-FR-EloiseNeural 是一个非常地道的法国女声
     communicate = edge_tts.Communicate(text, "fr-FR-EloiseNeural")
     audio_data = b""
     async for chunk in communicate.stream():
@@ -23,28 +22,12 @@ async def generate_voice(text):
             audio_data += chunk["data"]
     return audio_data
 
-def get_french_name(emoj_char):
-    prompt = f"针对符号 '{emoj_char}'，给出一个法语名词和对应的中文。格式：法语|中文"
-    try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=1.0,
-            max_tokens=40
-        )
-        return response.choices[0].message.content.strip().split("|")
-    except:
-        return ["Bonjour", "你好"]
-
-# 2. 极致简样式
+# 2. 样式
 st.set_page_config(page_title="Lille Survival", page_icon="🇫🇷")
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stDeployButton {visibility: hidden;}
-    .stButton>button { 
-        width: 100%; height: 120px; font-size: 100px; 
-        background: none; border: none;
-    }
+    .stButton>button { width: 100%; height: 120px; font-size: 100px; background: none; border: none; }
     .emoji-display { font-size: 150px; text-align: center; margin: 10px 0; }
     .fr-text { text-align: center; color: #002395; font-size: 70px; font-weight: bold; }
     .cn-text { text-align: center; color: #666; font-size: 30px; margin-bottom: 20px;}
@@ -52,31 +35,41 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 核心交互
+# 3. 逻辑逻辑
 if st.button("🇫🇷"):
     all_emojis = list(emoji.EMOJI_DATA.keys())
     random_emoji = random.choice(all_emojis)
     
-    res = get_french_name(random_emoji)
-    if len(res) >= 2:
-        fr, cn = res[0].strip(), res[1].strip()
+    # 强制 AI 生成新内容
+    prompt = f"针对符号 '{random_emoji}'，给出一个法语名词和对应的中文。格式：法语|中文"
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=1.2, # 提高随机性
+            max_tokens=40
+        )
+        res = response.choices[0].message.content.strip().split("|")
         
-        # 显示 Emoji 和文字
-        st.markdown(f'<div class="emoji-display">{random_emoji}</div>', unsafe_allow_html=True)
-        st.markdown(f'<p class="fr-text">{fr}</p>', unsafe_allow_html=True)
-        st.markdown(f'<p class="cn-text">{cn}</p>', unsafe_allow_html=True)
-        
-        # 🔊 使用 Edge TTS 生成语音
-        try:
+        if len(res) >= 2:
+            fr, cn = res[0].strip(), res[1].strip()
+            
+            st.markdown(f'<div class="emoji-display">{random_emoji}</div>', unsafe_allow_html=True)
+            st.markdown(f'<p class="fr-text">{fr}</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="cn-text">{cn}</p>', unsafe_allow_html=True)
+            
+            # 🔊 语音逻辑：加入随机时间戳戳破缓存
             audio_content = asyncio.run(generate_voice(fr))
             b64_audio = base64.b64encode(audio_content).decode()
+            nonce = time.time() # 生成一个当前时间戳
             
-            # 自动播放 HTML
+            # 在 src 后面加一个无意义的参数 ?v={nonce}
             audio_html = f"""
-                <audio autoplay="true" controls>
-                    <source src="data:audio/mp3;base64,{b64_audio}" type="audio/mp3">
+                <audio autoplay="true" controls key="{nonce}">
+                    <source src="data:audio/mp3;base64,{b64_audio}#t={nonce}" type="audio/mp3">
                 </audio>
             """
             st.markdown(audio_html, unsafe_allow_html=True)
-        except Exception as e:
-            st.error("语音生成暂时不可用，请稍后再试")
+            
+    except Exception as e:
+        st.error("哎呀，断网了或出错了，再点一次试试")
